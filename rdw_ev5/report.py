@@ -8,25 +8,58 @@ from pathlib import Path
 
 REPORTS_DIR = Path(__file__).resolve().parent.parent / "data" / "reports"
 
-# Map Dutch color names to CSS colors (light mode)
+# Kia EV5 NL exterior colors → CSS (light mode)
 COLOR_MAP = {
-    "BLAUW": "#1f77b4",
-    "GRIJS": "#7f7f7f",
-    "GROEN": "#2ca02c",
-    "ZWART": "#1a1a1a",
-    "WIT": "#d4d4d4",
-    "ROOD": "#d62728",
-    "BRUIN": "#8c564b",
-    "GEEL": "#ffe119",
-    "ORANJE": "#ff7f0e",
-    "PAARS": "#9467bd",
+    "Snow White Pearl": "#e2e8f0",
+    "Ivory Silver / Gravity Gray": "#94a3b8",
+    "Fusion Black": "#334155",
+    "Frost Blue / Dark Ocean Blue": "#3b82f6",
+    "Magma Red": "#dc2626",
+    "Iceberg Green": "#4ade80",
+    "Iceberg Green Matte": "#16a34a",
 }
 
-# Overrides for dark mode (only entries that need a different color)
+# Dark-mode overrides (only where the light-mode color would be near-invisible)
 DARK_COLOR_MAP = {
-    "ZWART": "#cbd5e1",  # slate-300 — visible on dark backgrounds
-    "WIT": "#f8fafc",  # slate-50 — brighter white for contrast
+    "Snow White Pearl": "#f1f5f9",
+    "Fusion Black": "#94a3b8",
+    "Ivory Silver / Gravity Gray": "#cbd5e1",
 }
+
+COLOR_ORDER = [
+    "Snow White Pearl",
+    "Ivory Silver / Gravity Gray",
+    "Fusion Black",
+    "Frost Blue / Dark Ocean Blue",
+    "Magma Red",
+    "Iceberg Green",
+    "Iceberg Green Matte",
+]
+
+# Fiscal base prices used to detect matte-lak surcharge (+€1,895)
+MATTE_BASE_PRICES = {43450, 44950, 45450, 47450, 48950, 50950}
+
+
+def _derive_color(kleur: str | None, price: int | None) -> str:
+    """Map RDW Dutch color name to a specific Kia exterior color label."""
+    if not kleur:
+        return "Onbekend"
+    k = kleur.upper()
+    if k == "WIT":
+        return "Snow White Pearl"
+    if k == "GRIJS":
+        return "Ivory Silver / Gravity Gray"
+    if k == "ZWART":
+        return "Fusion Black"
+    if k == "BLAUW":
+        return "Frost Blue / Dark Ocean Blue"
+    if k == "ROOD":
+        return "Magma Red"
+    if k == "GROEN":
+        p = int(price) if price else 0
+        return "Iceberg Green Matte" if (p - 1895) in MATTE_BASE_PRICES else "Iceberg Green"
+    return kleur.capitalize()
+
 
 # Trim derivation from uitvoering code + fiscal price (Kia NL prijslijst)
 #   E11AZ1 = 530 km battery (Air / Plus)
@@ -90,15 +123,18 @@ def _query_by_date_and_group(conn: sqlite3.Connection, group_col: str) -> dict:
     return data
 
 
-def _build_cumulative(data: dict, all_dates: list[str]) -> dict[str, list[int]]:
+def _build_cumulative(
+    data: dict, all_dates: list[str], order: list[str] | None = None
+) -> dict[str, list[int]]:
     """Convert per-day counts to cumulative series aligned to all_dates."""
     result = {}
+    _order = order or []
 
     def _sort_key(name: str) -> int:
         try:
-            return TRIM_ORDER.index(name)
+            return _order.index(name)
         except ValueError:
-            return len(TRIM_ORDER)
+            return len(_order)
 
     for group, date_counts in sorted(data.items(), key=lambda x: _sort_key(x[0])):
         cumulative = []
@@ -122,22 +158,18 @@ def _get_all_dates(conn: sqlite3.Connection) -> list[str]:
     return [r[0] for r in rows]
 
 
-def _color_for(kleur: str) -> str:
-    return COLOR_MAP.get(kleur.upper(), "#bcbd22")
-
-
-HIGHLIGHT_COLORS = {"WIT", "ROOD"}
+HIGHLIGHT_COLORS = {"Snow White Pearl", "Magma Red"}
 
 
 def _make_color_datasets(series: dict[str, list[int]]) -> list[dict]:
     datasets = []
-    for kleur, values in series.items():
-        highlight = kleur.upper() in HIGHLIGHT_COLORS
-        light = COLOR_MAP.get(kleur.upper(), "#bcbd22")
-        dark = DARK_COLOR_MAP.get(kleur.upper(), light)
+    for color_name, values in series.items():
+        highlight = color_name in HIGHLIGHT_COLORS
+        light = COLOR_MAP.get(color_name, "#bcbd22")
+        dark = DARK_COLOR_MAP.get(color_name, light)
         datasets.append(
             {
-                "label": kleur.capitalize(),
+                "label": color_name,
                 "data": values,
                 "borderColor": light,
                 "backgroundColor": light,
@@ -169,6 +201,24 @@ def _make_trim_datasets(series: dict[str, list[int]]) -> list[dict]:
     return datasets
 
 
+def _query_by_date_and_color(conn: sqlite3.Connection) -> dict:
+    """Return {color_label: {date: count}}, splitting Iceberg Green from Matte."""
+    rows = conn.execute(
+        """
+        SELECT substr(bpm_datum, 1, 10) as d, eerste_kleur, catalogusprijs, count(*)
+        FROM vehicles
+        WHERE bpm_datum IS NOT NULL
+        GROUP BY d, eerste_kleur, catalogusprijs
+        ORDER BY d
+        """
+    ).fetchall()
+    data: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for d, kleur, price, count in rows:
+        label = _derive_color(kleur, price)
+        data[label][d] += count
+    return dict(data)
+
+
 def _query_by_date_and_trim(conn: sqlite3.Connection) -> dict:
     """Return {trim: {date: count}} derived from uitvoering + catalogusprijs."""
     rows = conn.execute(
@@ -197,16 +247,16 @@ def generate_report(conn: sqlite3.Connection, output_dir: Path = REPORTS_DIR) ->
     all_dates = _get_all_dates(conn)
     month_dates = [d for d in all_dates if d.startswith(month_prefix)]
 
-    color_data = _query_by_date_and_group(conn, "eerste_kleur")
+    color_data = _query_by_date_and_color(conn)
     trim_data = _query_by_date_and_trim(conn)
 
     # All-time cumulative
-    all_color_series = _build_cumulative(color_data, all_dates)
-    all_price_series = _build_cumulative(trim_data, all_dates)
+    all_color_series = _build_cumulative(color_data, all_dates, COLOR_ORDER)
+    all_price_series = _build_cumulative(trim_data, all_dates, TRIM_ORDER)
 
     # Current-month cumulative
-    month_color_series = _build_cumulative(color_data, month_dates)
-    month_price_series = _build_cumulative(trim_data, month_dates)
+    month_color_series = _build_cumulative(color_data, month_dates, COLOR_ORDER)
+    month_price_series = _build_cumulative(trim_data, month_dates, TRIM_ORDER)
 
     total = conn.execute("SELECT COUNT(*) FROM vehicles").fetchone()[0]
     all_gross = conn.execute("SELECT COALESCE(SUM(catalogusprijs), 0) FROM vehicles").fetchone()[0]
