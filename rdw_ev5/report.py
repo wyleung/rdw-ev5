@@ -8,7 +8,7 @@ from pathlib import Path
 
 REPORTS_DIR = Path(__file__).resolve().parent.parent / "data" / "reports"
 
-# Map Dutch color names to CSS colors
+# Map Dutch color names to CSS colors (light mode)
 COLOR_MAP = {
     "BLAUW": "#1f77b4",
     "GRIJS": "#7f7f7f",
@@ -20,6 +20,12 @@ COLOR_MAP = {
     "GEEL": "#ffe119",
     "ORANJE": "#ff7f0e",
     "PAARS": "#9467bd",
+}
+
+# Overrides for dark mode (only entries that need a different color)
+DARK_COLOR_MAP = {
+    "ZWART": "#cbd5e1",  # slate-300 — visible on dark backgrounds
+    "WIT": "#f8fafc",  # slate-50 — brighter white for contrast
 }
 
 PRICE_PALETTE = [
@@ -89,12 +95,16 @@ def _make_color_datasets(series: dict[str, list[int]]) -> list[dict]:
     datasets = []
     for kleur, values in series.items():
         highlight = kleur.upper() in HIGHLIGHT_COLORS
+        light = COLOR_MAP.get(kleur.upper(), "#bcbd22")
+        dark = DARK_COLOR_MAP.get(kleur.upper(), light)
         datasets.append(
             {
                 "label": kleur.capitalize(),
                 "data": values,
-                "borderColor": _color_for(kleur),
-                "backgroundColor": _color_for(kleur),
+                "borderColor": light,
+                "backgroundColor": light,
+                "lightColor": light,
+                "darkColor": dark,
                 "borderWidth": 4 if highlight else 2,
                 "pointRadius": 2 if highlight else 1,
                 "fill": False,
@@ -255,6 +265,17 @@ function themeColors() {{
 }}
 let {{ text: textColor, grid: gridColor }} = themeColors();
 
+function applyDatasetColors(charts) {{
+  const dark = isDark();
+  Object.values(charts).forEach(c => {{
+    c.data.datasets.forEach(ds => {{
+      const color = dark ? (ds.darkColor ?? ds.lightColor) : (ds.lightColor ?? ds.borderColor);
+      if (color) {{ ds.borderColor = ds.backgroundColor = color; }}
+    }});
+    c.update('none');
+  }});
+}}
+
 const charts = {{}};
 
 const allDates = {json.dumps(all_dates)};
@@ -270,6 +291,8 @@ const monthPriceDs = {json.dumps(_make_price_datasets(month_price_series))};
 {_chart_js("allPrice", "allDates", "allPriceDs", f"By catalog price — all time (gross {_fmt_eur(all_gross)})")}
 {_chart_js("monthPrice", "monthDates", "monthPriceDs", f"By catalog price — {month} (gross {_fmt_eur(month_gross)} — {month_gross * 100 / all_gross:.1f}% of total)")}
 
+applyDatasetColors(charts);
+
 function toggleTheme() {{
   document.documentElement.classList.toggle('dark');
   const {{ text, grid }} = themeColors();
@@ -283,6 +306,7 @@ function toggleTheme() {{
     }});
     c.update();
   }});
+  applyDatasetColors(charts);
 }}
 </script>
 </body>
