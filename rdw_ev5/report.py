@@ -28,6 +28,16 @@ DARK_COLOR_MAP = {
     "WIT": "#f8fafc",  # slate-50 — brighter white for contrast
 }
 
+# Kia EV5 NL catalog price → trim name (prijslijst januari 2026)
+PRICE_TO_TRIM: dict[str, str] = {
+    "44495": "Air",
+    "45995": "GT-Line Business",
+    "46495": "Plus",
+    "48495": "Plus Advanced",
+    "49995": "GT-Line",
+    "51995": "GT-PlusLine",
+}
+
 PRICE_PALETTE = [
     "#e6194b",
     "#3cb44b",
@@ -117,9 +127,11 @@ def _make_price_datasets(series: dict[str, list[int]]) -> list[dict]:
     datasets = []
     for i, (price, values) in enumerate(series.items()):
         color = PRICE_PALETTE[i % len(PRICE_PALETTE)]
+        trim = PRICE_TO_TRIM.get(str(price))
+        label = f"{trim} (€{price})" if trim else f"€{price}"
         datasets.append(
             {
-                "label": f"\u20ac{price}",
+                "label": label,
                 "data": values,
                 "borderColor": color,
                 "backgroundColor": color,
