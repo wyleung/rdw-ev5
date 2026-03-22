@@ -233,6 +233,23 @@ def _query_by_date_and_trim(conn: sqlite3.Connection) -> dict:
     return dict(data)
 
 
+def _query_trim_color_matrix(conn: sqlite3.Connection) -> dict:
+    """Return {trim: {color: count}} for the full trim × color matrix."""
+    rows = conn.execute(
+        """
+        SELECT uitvoering, catalogusprijs, eerste_kleur, count(*) as n
+        FROM vehicles
+        GROUP BY uitvoering, catalogusprijs, eerste_kleur
+        """
+    ).fetchall()
+    matrix: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for uitvoering, price, kleur, n in rows:
+        trim = _derive_trim(uitvoering, price)
+        color = _derive_color(kleur, price)
+        matrix[trim][color] += n
+    return {trim: dict(colors) for trim, colors in matrix.items()}
+
+
 def generate_report(conn: sqlite3.Connection, output_dir: Path = REPORTS_DIR) -> Path:
     today = date.today()
     today_str = today.isoformat()
@@ -261,6 +278,8 @@ def generate_report(conn: sqlite3.Connection, output_dir: Path = REPORTS_DIR) ->
         (month_prefix + "%",),
     ).fetchone()[0]
 
+    matrix = _query_trim_color_matrix(conn)
+
     html = _render_html(
         today_str,
         month_prefix,
@@ -273,6 +292,7 @@ def generate_report(conn: sqlite3.Connection, output_dir: Path = REPORTS_DIR) ->
         month_dates,
         month_color_series,
         month_price_series,
+        matrix,
     )
     output_path.write_text(html)
     return output_path
@@ -325,6 +345,7 @@ def _render_html(
     month_dates: list[str],
     month_color_series: dict[str, list[int]],
     month_price_series: dict[str, list[int]],
+    matrix: dict,
 ) -> str:
     return f"""\
 <!DOCTYPE html>
@@ -342,20 +363,27 @@ def _render_html(
 <header class="flex items-center gap-4 px-5 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shrink-0">
   <h1 class="text-base font-semibold text-gray-900 dark:text-white">Kia EV5 Registrations in the Netherlands</h1>
   <span class="text-sm text-gray-500 dark:text-gray-400">{today} &middot; {total} vehicles tracked</span>
-  <button onclick="toggleTheme()" class="ml-auto p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700" aria-label="Toggle theme">
-    <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20">
-      <path fill-rule="evenodd" clip-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"></path>
-    </svg>
-    <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20">
-      <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
-    </svg>
-  </button>
+  <div class="ml-auto flex items-center gap-2">
+    <button id="btn-charts" onclick="showView('charts')" class="px-3 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white">Charts</button>
+    <button id="btn-matrix" onclick="showView('matrix')" class="px-3 py-1.5 text-sm font-medium rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">Matrix</button>
+    <button onclick="toggleTheme()" class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700" aria-label="Toggle theme">
+      <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"></path>
+      </svg>
+      <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+      </svg>
+    </button>
+  </div>
 </header>
-<div class="flex-1 grid grid-cols-2 grid-rows-2 min-h-0">
+<div id="view-charts" class="flex-1 grid grid-cols-2 grid-rows-2 min-h-0">
   <div class="relative p-2 border border-gray-100 dark:border-gray-700 dark:bg-gray-900"><canvas id="allColor" class="absolute inset-2"></canvas></div>
   <div class="relative p-2 border border-gray-100 dark:border-gray-700 dark:bg-gray-900"><canvas id="monthColor" class="absolute inset-2"></canvas></div>
   <div class="relative p-2 border border-gray-100 dark:border-gray-700 dark:bg-gray-900"><canvas id="allPrice" class="absolute inset-2"></canvas></div>
   <div class="relative p-2 border border-gray-100 dark:border-gray-700 dark:bg-gray-900"><canvas id="monthPrice" class="absolute inset-2"></canvas></div>
+</div>
+<div id="view-matrix" class="hidden flex-1 overflow-auto p-6">
+  <table id="matrix-table" class="w-full border-collapse text-sm"></table>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/flowbite@2/dist/flowbite.min.js"></script>
 <script>
@@ -394,6 +422,127 @@ const monthPriceDs = {json.dumps(_make_trim_datasets(month_price_series))};
 {_chart_js("monthPrice", "monthDates", "monthPriceDs", f"By trim — {month} (gross {_fmt_eur(month_gross)} — {month_gross * 100 / all_gross:.1f}% of total)")}
 
 applyDatasetColors(charts);
+
+// ── View toggle ──────────────────────────────────────────────────────────────
+function showView(name) {{
+  document.getElementById('view-charts').classList.toggle('hidden', name !== 'charts');
+  document.getElementById('view-matrix').classList.toggle('hidden', name !== 'matrix');
+  const active   = 'px-3 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white';
+  const inactive = 'px-3 py-1.5 text-sm font-medium rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700';
+  document.getElementById('btn-charts').className = name === 'charts' ? active : inactive;
+  document.getElementById('btn-matrix').className = name === 'matrix' ? active : inactive;
+}}
+
+// ── Matrix ───────────────────────────────────────────────────────────────────
+(function () {{
+  const matrixData = {json.dumps(matrix)};
+  const trimOrder  = {json.dumps(TRIM_ORDER)};
+  const colorOrder = {json.dumps(COLOR_ORDER)};
+  const colorShort = {{
+    "Snow White Pearl":             "Snow White",
+    "Ivory Silver / Gravity Gray":  "Ivory / Gravity",
+    "Fusion Black":                 "Fusion Black",
+    "Frost Blue / Dark Ocean Blue": "Frost / Ocean Blue",
+    "Magma Red":                    "Magma Red",
+    "Iceberg Green":                "Iceberg Green",
+    "Iceberg Green Matte":          "Iceberg Matte",
+  }};
+
+  const TH  = 'px-4 py-3 font-semibold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700';
+  const TD  = 'px-4 py-3 text-center text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
+  const TOT = 'px-4 py-3 text-center font-semibold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700';
+
+  const table = document.getElementById('matrix-table');
+
+  // Header
+  const thead = table.createTHead();
+  const hrow  = thead.insertRow();
+  const corner = document.createElement('th');
+  corner.className = TH + ' text-left whitespace-nowrap';
+  corner.textContent = 'Trim \\ Kleur';
+  hrow.appendChild(corner);
+  colorOrder.forEach((color, i) => {{
+    const th = document.createElement('th');
+    th.className = TH + ' whitespace-nowrap';
+    th.textContent = colorShort[color] || color;
+    th.title = color;
+    th.dataset.col = i;
+    hrow.appendChild(th);
+  }});
+  const totHdr = document.createElement('th');
+  totHdr.className = TH;
+  totHdr.textContent = 'Total';
+  hrow.appendChild(totHdr);
+
+  // Body
+  const tbody     = table.createTBody();
+  const colTotals = new Array(colorOrder.length).fill(0);
+  let grandTotal  = 0;
+
+  trimOrder.forEach(trim => {{
+    const tr      = tbody.insertRow();
+    const rowData = matrixData[trim] || {{}};
+    let rowTotal  = 0;
+
+    const th = document.createElement('th');
+    th.className = TH + ' text-left whitespace-nowrap';
+    th.textContent = trim;
+    tr.appendChild(th);
+
+    colorOrder.forEach((color, i) => {{
+      const count = rowData[color] || 0;
+      rowTotal      += count;
+      colTotals[i]  += count;
+      const td = tr.insertCell();
+      td.className  = TD;
+      td.textContent = count || '';
+      td.dataset.col = i;
+    }});
+
+    grandTotal += rowTotal;
+    const totTd = tr.insertCell();
+    totTd.className  = TOT;
+    totTd.textContent = rowTotal;
+  }});
+
+  // Footer
+  const tfoot = table.createTFoot();
+  const frow  = tfoot.insertRow();
+  const fth   = document.createElement('th');
+  fth.className = TH + ' text-left';
+  fth.textContent = 'Total';
+  frow.appendChild(fth);
+  colTotals.forEach((n, i) => {{
+    const td = frow.insertCell();
+    td.className  = TOT;
+    td.textContent = n;
+    td.dataset.col = i;
+  }});
+  const grandTd = frow.insertCell();
+  grandTd.className  = TOT + ' font-bold';
+  grandTd.textContent = grandTotal;
+
+  // Hover: highlight row + column
+  const HL_RC   = 'rgba(59,130,246,0.12)';
+  const HL_CELL = 'rgba(59,130,246,0.30)';
+
+  function clearHL() {{
+    table.querySelectorAll('td,th').forEach(el => el.style.removeProperty('background-color'));
+  }}
+
+  table.addEventListener('mouseover', e => {{
+    const cell = e.target.closest('td,th');
+    if (!cell) return;
+    clearHL();
+    cell.closest('tr').querySelectorAll('td,th').forEach(c => c.style.backgroundColor = HL_RC);
+    const col = cell.dataset.col;
+    if (col !== undefined) {{
+      table.querySelectorAll(`[data-col="${{col}}"]`).forEach(c => c.style.backgroundColor = HL_RC);
+      cell.style.backgroundColor = HL_CELL;
+    }}
+  }});
+  table.addEventListener('mouseleave', clearHL);
+}})();
 
 function toggleTheme() {{
   document.documentElement.classList.toggle('dark');
