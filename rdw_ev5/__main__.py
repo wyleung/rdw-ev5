@@ -14,13 +14,24 @@ def main() -> None:
         default=db.DEFAULT_DB,
         help="Path to SQLite database (default: data/ev5.db)",
     )
+    parser.add_argument(
+        "--report-only",
+        action="store_true",
+        help="Regenerate the HTML report from existing DB data without fetching from the API",
+    )
     args = parser.parse_args()
+
+    conn = db.connect(args.db)
+    if args.report_only:
+        report_path = report.generate_report(conn)
+        conn.close()
+        print(f"Report: {report_path}")
+        return
 
     print("Fetching Kia EV5 registrations from RDW...")
     vehicles = scraper.fetch_all()
     print(f"API returned {len(vehicles)} vehicles")
 
-    conn = db.connect(args.db)
     new_vehicles = db.upsert_vehicles(conn, vehicles)
     total = db.get_total_count(conn)
 
