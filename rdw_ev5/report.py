@@ -158,13 +158,9 @@ def _get_all_dates(conn: sqlite3.Connection) -> list[str]:
     return [r[0] for r in rows]
 
 
-HIGHLIGHT_COLORS = {"Snow White Pearl", "Magma Red"}
-
-
 def _make_color_datasets(series: dict[str, list[int]]) -> list[dict]:
     datasets = []
     for color_name, values in series.items():
-        highlight = color_name in HIGHLIGHT_COLORS
         light = COLOR_MAP.get(color_name, "#bcbd22")
         dark = DARK_COLOR_MAP.get(color_name, light)
         datasets.append(
@@ -175,8 +171,8 @@ def _make_color_datasets(series: dict[str, list[int]]) -> list[dict]:
                 "backgroundColor": light,
                 "lightColor": light,
                 "darkColor": dark,
-                "borderWidth": 4 if highlight else 2,
-                "pointRadius": 2 if highlight else 1,
+                "borderWidth": 4,
+                "pointRadius": 2,
                 "fill": False,
             }
         )
@@ -193,8 +189,8 @@ def _make_trim_datasets(series: dict[str, list[int]]) -> list[dict]:
                 "data": values,
                 "borderColor": color,
                 "backgroundColor": color,
-                "borderWidth": 2,
-                "pointRadius": 1,
+                "borderWidth": 4,
+                "pointRadius": 2,
                 "fill": False,
             }
         )
