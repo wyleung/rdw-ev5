@@ -216,16 +216,11 @@ def _render_html(
 ) -> str:
     return f"""\
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kia EV5 NL Registrations &mdash; {today}</title>
-<script>
-  if (window.matchMedia('(prefers-color-scheme: dark)').matches) {{
-    document.documentElement.classList.add('dark');
-  }}
-</script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>tailwind.config = {{ darkMode: 'class' }}</script>
 <link href="https://cdn.jsdelivr.net/npm/flowbite@2/dist/flowbite.min.css" rel="stylesheet">
