@@ -1,6 +1,7 @@
 """Alert when new vehicles match watch criteria."""
 
 import subprocess
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -51,10 +52,21 @@ def notify(matches: list[dict]) -> None:
 
     # Desktop notification
     try:
-        subprocess.run(
-            ["notify-send", "--urgency=critical", "-i", "car", header, body],
-            timeout=5,
-        )
+        if sys.platform == "darwin":
+            escaped_header = header.replace('"', '\\"')
+            escaped_body = body.replace('"', '\\"')
+            subprocess.run(
+                [
+                    "osascript", "-e",
+                    f'display notification "{escaped_body}" with title "{escaped_header}"',
+                ],
+                timeout=5,
+            )
+        elif sys.platform.startswith("linux"):
+            subprocess.run(
+                ["notify-send", "--urgency=critical", "-i", "car", header, body],
+                timeout=5,
+            )
     except FileNotFoundError:
         pass
 
