@@ -168,7 +168,7 @@ def generate_report(conn: sqlite3.Connection, output_dir: Path = REPORTS_DIR) ->
 
 def _chart_js(canvas_id: str, dates_var: str, datasets_var: str, title: str) -> str:
     return f"""
-new Chart(document.getElementById('{canvas_id}'), {{
+charts['{canvas_id}'] = new Chart(document.getElementById('{canvas_id}'), {{
   type: 'line',
   data: {{ labels: {dates_var}, datasets: {datasets_var} }},
   options: {{
@@ -230,6 +230,14 @@ def _render_html(
 <header class="flex items-center gap-4 px-5 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shrink-0">
   <h1 class="text-base font-semibold text-gray-900 dark:text-white">Kia EV5 Registrations in the Netherlands</h1>
   <span class="text-sm text-gray-500 dark:text-gray-400">{today} &middot; {total} vehicles tracked</span>
+  <button onclick="toggleTheme()" class="ml-auto p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700" aria-label="Toggle theme">
+    <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20">
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"></path>
+    </svg>
+    <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20">
+      <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+    </svg>
+  </button>
 </header>
 <div class="flex-1 grid grid-cols-2 grid-rows-2 min-h-0">
   <div class="relative p-2 border border-gray-100 dark:border-gray-700 dark:bg-gray-900"><canvas id="allColor" class="absolute inset-2"></canvas></div>
@@ -239,9 +247,15 @@ def _render_html(
 </div>
 <script src="https://cdn.jsdelivr.net/npm/flowbite@2/dist/flowbite.min.js"></script>
 <script>
-const dark = document.documentElement.classList.contains('dark');
-const textColor = dark ? '#9ca3af' : '#374151';
-const gridColor = dark ? '#374151' : '#e5e7eb';
+function isDark() {{ return document.documentElement.classList.contains('dark'); }}
+function themeColors() {{
+  return isDark()
+    ? {{ text: '#9ca3af', grid: '#374151' }}
+    : {{ text: '#374151', grid: '#e5e7eb' }};
+}}
+let {{ text: textColor, grid: gridColor }} = themeColors();
+
+const charts = {{}};
 
 const allDates = {json.dumps(all_dates)};
 const monthDates = {json.dumps(month_dates)};
@@ -255,6 +269,21 @@ const monthPriceDs = {json.dumps(_make_price_datasets(month_price_series))};
 {_chart_js("monthColor", "monthDates", "monthColorDs", f"By color — {month} (gross {_fmt_eur(month_gross)} — {month_gross * 100 / all_gross:.1f}% of total)")}
 {_chart_js("allPrice", "allDates", "allPriceDs", f"By catalog price — all time (gross {_fmt_eur(all_gross)})")}
 {_chart_js("monthPrice", "monthDates", "monthPriceDs", f"By catalog price — {month} (gross {_fmt_eur(month_gross)} — {month_gross * 100 / all_gross:.1f}% of total)")}
+
+function toggleTheme() {{
+  document.documentElement.classList.toggle('dark');
+  const {{ text, grid }} = themeColors();
+  Object.values(charts).forEach(c => {{
+    c.options.plugins.title.color = text;
+    c.options.plugins.legend.labels.color = text;
+    ['x', 'y'].forEach(ax => {{
+      c.options.scales[ax].title.color = text;
+      c.options.scales[ax].ticks.color = text;
+      c.options.scales[ax].grid.color = grid;
+    }});
+    c.update();
+  }});
+}}
 </script>
 </body>
 </html>
