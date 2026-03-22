@@ -28,15 +28,36 @@ DARK_COLOR_MAP = {
     "WIT": "#f8fafc",  # slate-50 — brighter white for contrast
 }
 
-# Kia EV5 NL catalog price → trim name (prijslijst januari 2026)
-PRICE_TO_TRIM: dict[str, str] = {
-    "44495": "Air",
-    "45995": "GT-Line Business",
-    "46495": "Plus",
-    "48495": "Plus Advanced",
-    "49995": "GT-Line",
-    "51995": "GT-PlusLine",
+# Trim derivation from uitvoering code + fiscal price (Kia NL prijslijst)
+#   E11AZ1 = 530 km battery (Air / Plus)
+#   E11BZ1 = 520 km battery (Plus Advanced)
+#   E11CY1 = 505 km battery (GT-Line Business / GT-Line / GT-PlusLine)
+TRIM_ORDER = ["Air", "Plus", "Plus Advanced", "GT-Line Business", "GT-Line", "GT-PlusLine"]
+
+TRIM_COLORS = {
+    "Air": "#60a5fa",
+    "Plus": "#34d399",
+    "Plus Advanced": "#f59e0b",
+    "GT-Line Business": "#a78bfa",
+    "GT-Line": "#f97316",
+    "GT-PlusLine": "#ef4444",
 }
+
+
+def _derive_trim(uitvoering: str | None, price: int | None) -> str:
+    p = int(price) if price is not None else 0
+    if uitvoering == "E11AZ1":
+        return "Air" if p < 45000 else "Plus"
+    if uitvoering == "E11BZ1":
+        return "Plus Advanced"
+    if uitvoering == "E11CY1":
+        if p < 47500:
+            return "GT-Line Business"
+        if p < 50000:
+            return "GT-Line"
+        return "GT-PlusLine"
+    return f"€{p}" if p else "Onbekend"
+
 
 PRICE_PALETTE = [
     "#e6194b",
@@ -72,7 +93,14 @@ def _query_by_date_and_group(conn: sqlite3.Connection, group_col: str) -> dict:
 def _build_cumulative(data: dict, all_dates: list[str]) -> dict[str, list[int]]:
     """Convert per-day counts to cumulative series aligned to all_dates."""
     result = {}
-    for group, date_counts in sorted(data.items()):
+
+    def _sort_key(name: str) -> int:
+        try:
+            return TRIM_ORDER.index(name)
+        except ValueError:
+            return len(TRIM_ORDER)
+
+    for group, date_counts in sorted(data.items(), key=lambda x: _sort_key(x[0])):
         cumulative = []
         total = 0
         for d in all_dates:
@@ -123,15 +151,13 @@ def _make_color_datasets(series: dict[str, list[int]]) -> list[dict]:
     return datasets
 
 
-def _make_price_datasets(series: dict[str, list[int]]) -> list[dict]:
+def _make_trim_datasets(series: dict[str, list[int]]) -> list[dict]:
     datasets = []
-    for i, (price, values) in enumerate(series.items()):
-        color = PRICE_PALETTE[i % len(PRICE_PALETTE)]
-        trim = PRICE_TO_TRIM.get(str(price))
-        label = f"{trim} (€{price})" if trim else f"€{price}"
+    for trim, values in series.items():
+        color = TRIM_COLORS.get(trim, "#94a3b8")
         datasets.append(
             {
-                "label": label,
+                "label": trim,
                 "data": values,
                 "borderColor": color,
                 "backgroundColor": color,
@@ -141,6 +167,24 @@ def _make_price_datasets(series: dict[str, list[int]]) -> list[dict]:
             }
         )
     return datasets
+
+
+def _query_by_date_and_trim(conn: sqlite3.Connection) -> dict:
+    """Return {trim: {date: count}} derived from uitvoering + catalogusprijs."""
+    rows = conn.execute(
+        """
+        SELECT substr(bpm_datum, 1, 10) as d, uitvoering, catalogusprijs, count(*)
+        FROM vehicles
+        WHERE bpm_datum IS NOT NULL
+        GROUP BY d, uitvoering, catalogusprijs
+        ORDER BY d
+        """
+    ).fetchall()
+    data: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for d, uitvoering, price, count in rows:
+        trim = _derive_trim(uitvoering, price)
+        data[trim][d] += count
+    return dict(data)
 
 
 def generate_report(conn: sqlite3.Connection, output_dir: Path = REPORTS_DIR) -> Path:
@@ -154,15 +198,15 @@ def generate_report(conn: sqlite3.Connection, output_dir: Path = REPORTS_DIR) ->
     month_dates = [d for d in all_dates if d.startswith(month_prefix)]
 
     color_data = _query_by_date_and_group(conn, "eerste_kleur")
-    price_data = _query_by_date_and_group(conn, "catalogusprijs")
+    trim_data = _query_by_date_and_trim(conn)
 
     # All-time cumulative
     all_color_series = _build_cumulative(color_data, all_dates)
-    all_price_series = _build_cumulative(price_data, all_dates)
+    all_price_series = _build_cumulative(trim_data, all_dates)
 
     # Current-month cumulative
     month_color_series = _build_cumulative(color_data, month_dates)
-    month_price_series = _build_cumulative(price_data, month_dates)
+    month_price_series = _build_cumulative(trim_data, month_dates)
 
     total = conn.execute("SELECT COUNT(*) FROM vehicles").fetchone()[0]
     all_gross = conn.execute("SELECT COALESCE(SUM(catalogusprijs), 0) FROM vehicles").fetchone()[0]
@@ -295,13 +339,13 @@ const monthDates = {json.dumps(month_dates)};
 
 const allColorDs = {json.dumps(_make_color_datasets(all_color_series))};
 const monthColorDs = {json.dumps(_make_color_datasets(month_color_series))};
-const allPriceDs = {json.dumps(_make_price_datasets(all_price_series))};
-const monthPriceDs = {json.dumps(_make_price_datasets(month_price_series))};
+const allPriceDs = {json.dumps(_make_trim_datasets(all_price_series))};
+const monthPriceDs = {json.dumps(_make_trim_datasets(month_price_series))};
 
 {_chart_js("allColor", "allDates", "allColorDs", f"By color — all time (gross {_fmt_eur(all_gross)})")}
 {_chart_js("monthColor", "monthDates", "monthColorDs", f"By color — {month} (gross {_fmt_eur(month_gross)} — {month_gross * 100 / all_gross:.1f}% of total)")}
-{_chart_js("allPrice", "allDates", "allPriceDs", f"By catalog price — all time (gross {_fmt_eur(all_gross)})")}
-{_chart_js("monthPrice", "monthDates", "monthPriceDs", f"By catalog price — {month} (gross {_fmt_eur(month_gross)} — {month_gross * 100 / all_gross:.1f}% of total)")}
+{_chart_js("allPrice", "allDates", "allPriceDs", f"By trim — all time (gross {_fmt_eur(all_gross)})")}
+{_chart_js("monthPrice", "monthDates", "monthPriceDs", f"By trim — {month} (gross {_fmt_eur(month_gross)} — {month_gross * 100 / all_gross:.1f}% of total)")}
 
 applyDatasetColors(charts);
 

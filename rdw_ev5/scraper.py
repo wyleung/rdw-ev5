@@ -12,6 +12,7 @@ FIELDS = [
     "datum_tenaamstelling",
     "eerste_kleur",
     "handelsbenaming",
+    "uitvoering",
 ]
 
 QUERY = """\

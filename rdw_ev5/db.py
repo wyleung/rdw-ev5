@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
     datum_tenaamstelling   TEXT,
     eerste_kleur   TEXT,
     handelsbenaming TEXT,
+    uitvoering     TEXT,
     first_seen     TEXT NOT NULL DEFAULT (date('now'))
 );
 """
@@ -24,6 +25,10 @@ def connect(db_path: Path = DEFAULT_DB) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute(SCHEMA)
+    try:
+        conn.execute("ALTER TABLE vehicles ADD COLUMN uitvoering TEXT")
+    except sqlite3.OperationalError:
+        pass  # column already exists
     conn.commit()
     return conn
 
@@ -33,15 +38,22 @@ def upsert_vehicles(conn: sqlite3.Connection, vehicles: list[dict]) -> list[dict
     new = []
     for v in vehicles:
         kenteken = v["kenteken"]
-        existing = conn.execute("SELECT 1 FROM vehicles WHERE kenteken = ?", (kenteken,)).fetchone()
+        existing = conn.execute(
+            "SELECT uitvoering FROM vehicles WHERE kenteken = ?", (kenteken,)
+        ).fetchone()
         if existing:
+            if existing["uitvoering"] is None:
+                conn.execute(
+                    "UPDATE vehicles SET uitvoering = ? WHERE kenteken = ?",
+                    (v.get("uitvoering"), kenteken),
+                )
             continue
         conn.execute(
             """\
             INSERT INTO vehicles (kenteken, catalogusprijs, bpm_datum,
                                   typegoedkeuringsnummer, datum_tenaamstelling,
-                                  eerste_kleur, handelsbenaming)
-            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                                  eerste_kleur, handelsbenaming, uitvoering)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 kenteken,
                 v.get("catalogusprijs"),
@@ -50,6 +62,7 @@ def upsert_vehicles(conn: sqlite3.Connection, vehicles: list[dict]) -> list[dict
                 v.get("datum_tenaamstelling"),
                 v.get("eerste_kleur"),
                 v.get("handelsbenaming"),
+                v.get("uitvoering"),
             ),
         )
         new.append(v)
