@@ -174,10 +174,22 @@ new Chart(document.getElementById('{canvas_id}'), {{
   options: {{
     responsive: true,
     maintainAspectRatio: false,
-    plugins: {{ title: {{ display: true, text: '{title}' }} }},
+    plugins: {{
+      title: {{ display: true, text: '{title}', color: textColor }},
+      legend: {{ labels: {{ color: textColor }} }}
+    }},
     scales: {{
-      x: {{ title: {{ display: true, text: 'Date' }} }},
-      y: {{ title: {{ display: true, text: 'Cumulative vehicles' }}, beginAtZero: true }}
+      x: {{
+        title: {{ display: true, text: 'Date', color: textColor }},
+        ticks: {{ color: textColor }},
+        grid: {{ color: gridColor }}
+      }},
+      y: {{
+        title: {{ display: true, text: 'Cumulative vehicles', color: textColor }},
+        ticks: {{ color: textColor }},
+        grid: {{ color: gridColor }},
+        beginAtZero: true
+      }}
     }}
   }}
 }});"""
@@ -209,30 +221,33 @@ def _render_html(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kia EV5 NL Registrations &mdash; {today}</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-<style>
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{ font-family: system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; }}
-  header {{ padding: 0.8rem 1.2rem; border-bottom: 1px solid #ddd; }}
-  header h1 {{ font-size: 1.2rem; display: inline; }}
-  header .meta {{ color: #666; font-size: 0.85rem; margin-left: 1rem; }}
-  .grid {{ flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 0; min-height: 0; }}
-  .cell {{ position: relative; padding: 0.5rem; border: 1px solid #eee; }}
-  .cell canvas {{ position: absolute; inset: 0.5rem; }}
-</style>
-</head>
-<body>
-<header>
-  <h1>Kia EV5 Registrations in the Netherlands</h1>
-  <span class="meta">{today} &middot; {total} vehicles tracked</span>
-</header>
-<div class="grid">
-  <div class="cell"><canvas id="allColor"></canvas></div>
-  <div class="cell"><canvas id="monthColor"></canvas></div>
-  <div class="cell"><canvas id="allPrice"></canvas></div>
-  <div class="cell"><canvas id="monthPrice"></canvas></div>
-</div>
 <script>
+  if (window.matchMedia('(prefers-color-scheme: dark)').matches) {{
+    document.documentElement.classList.add('dark');
+  }}
+</script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config = {{ darkMode: 'class' }}</script>
+<link href="https://cdn.jsdelivr.net/npm/flowbite@2/dist/flowbite.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body class="bg-white dark:bg-gray-900 h-screen flex flex-col">
+<header class="flex items-center gap-4 px-5 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shrink-0">
+  <h1 class="text-base font-semibold text-gray-900 dark:text-white">Kia EV5 Registrations in the Netherlands</h1>
+  <span class="text-sm text-gray-500 dark:text-gray-400">{today} &middot; {total} vehicles tracked</span>
+</header>
+<div class="flex-1 grid grid-cols-2 grid-rows-2 min-h-0">
+  <div class="relative p-2 border border-gray-100 dark:border-gray-700 dark:bg-gray-900"><canvas id="allColor" class="absolute inset-2"></canvas></div>
+  <div class="relative p-2 border border-gray-100 dark:border-gray-700 dark:bg-gray-900"><canvas id="monthColor" class="absolute inset-2"></canvas></div>
+  <div class="relative p-2 border border-gray-100 dark:border-gray-700 dark:bg-gray-900"><canvas id="allPrice" class="absolute inset-2"></canvas></div>
+  <div class="relative p-2 border border-gray-100 dark:border-gray-700 dark:bg-gray-900"><canvas id="monthPrice" class="absolute inset-2"></canvas></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/flowbite@2/dist/flowbite.min.js"></script>
+<script>
+const dark = document.documentElement.classList.contains('dark');
+const textColor = dark ? '#9ca3af' : '#374151';
+const gridColor = dark ? '#374151' : '#e5e7eb';
+
 const allDates = {json.dumps(all_dates)};
 const monthDates = {json.dumps(month_dates)};
 
