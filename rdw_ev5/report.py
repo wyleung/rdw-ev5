@@ -23,8 +23,16 @@ COLOR_MAP = {
 }
 
 PRICE_PALETTE = [
-    "#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4",
-    "#42d4f4", "#f032e6", "#bfef45", "#fabebe", "#469990",
+    "#e6194b",
+    "#3cb44b",
+    "#4363d8",
+    "#f58231",
+    "#911eb4",
+    "#42d4f4",
+    "#f032e6",
+    "#bfef45",
+    "#fabebe",
+    "#469990",
 ]
 
 
@@ -81,15 +89,17 @@ def _make_color_datasets(series: dict[str, list[int]]) -> list[dict]:
     datasets = []
     for kleur, values in series.items():
         highlight = kleur.upper() in HIGHLIGHT_COLORS
-        datasets.append({
-            "label": kleur.capitalize(),
-            "data": values,
-            "borderColor": _color_for(kleur),
-            "backgroundColor": _color_for(kleur),
-            "borderWidth": 4 if highlight else 2,
-            "pointRadius": 2 if highlight else 1,
-            "fill": False,
-        })
+        datasets.append(
+            {
+                "label": kleur.capitalize(),
+                "data": values,
+                "borderColor": _color_for(kleur),
+                "backgroundColor": _color_for(kleur),
+                "borderWidth": 4 if highlight else 2,
+                "pointRadius": 2 if highlight else 1,
+                "fill": False,
+            }
+        )
     return datasets
 
 
@@ -97,15 +107,17 @@ def _make_price_datasets(series: dict[str, list[int]]) -> list[dict]:
     datasets = []
     for i, (price, values) in enumerate(series.items()):
         color = PRICE_PALETTE[i % len(PRICE_PALETTE)]
-        datasets.append({
-            "label": f"\u20ac{price}",
-            "data": values,
-            "borderColor": color,
-            "backgroundColor": color,
-            "borderWidth": 2,
-            "pointRadius": 1,
-            "fill": False,
-        })
+        datasets.append(
+            {
+                "label": f"\u20ac{price}",
+                "data": values,
+                "borderColor": color,
+                "backgroundColor": color,
+                "borderWidth": 2,
+                "pointRadius": 1,
+                "fill": False,
+            }
+        )
     return datasets
 
 
@@ -131,18 +143,24 @@ def generate_report(conn: sqlite3.Connection, output_dir: Path = REPORTS_DIR) ->
     month_price_series = _build_cumulative(price_data, month_dates)
 
     total = conn.execute("SELECT COUNT(*) FROM vehicles").fetchone()[0]
-    all_gross = conn.execute(
-        "SELECT COALESCE(SUM(catalogusprijs), 0) FROM vehicles"
-    ).fetchone()[0]
+    all_gross = conn.execute("SELECT COALESCE(SUM(catalogusprijs), 0) FROM vehicles").fetchone()[0]
     month_gross = conn.execute(
         "SELECT COALESCE(SUM(catalogusprijs), 0) FROM vehicles WHERE bpm_datum LIKE ?",
         (month_prefix + "%",),
     ).fetchone()[0]
 
     html = _render_html(
-        today_str, month_prefix, total, all_gross, month_gross,
-        all_dates, all_color_series, all_price_series,
-        month_dates, month_color_series, month_price_series,
+        today_str,
+        month_prefix,
+        total,
+        all_gross,
+        month_gross,
+        all_dates,
+        all_color_series,
+        all_price_series,
+        month_dates,
+        month_color_series,
+        month_price_series,
     )
     output_path.write_text(html)
     return output_path
@@ -172,7 +190,11 @@ def _fmt_eur(amount: int) -> str:
 
 
 def _render_html(
-    today: str, month: str, total: int, all_gross: int, month_gross: int,
+    today: str,
+    month: str,
+    total: int,
+    all_gross: int,
+    month_gross: int,
     all_dates: list[str],
     all_color_series: dict[str, list[int]],
     all_price_series: dict[str, list[int]],
@@ -219,10 +241,10 @@ const monthColorDs = {json.dumps(_make_color_datasets(month_color_series))};
 const allPriceDs = {json.dumps(_make_price_datasets(all_price_series))};
 const monthPriceDs = {json.dumps(_make_price_datasets(month_price_series))};
 
-{_chart_js('allColor', 'allDates', 'allColorDs', f'By color — all time (gross {_fmt_eur(all_gross)})')}
-{_chart_js('monthColor', 'monthDates', 'monthColorDs', f'By color — {month} (gross {_fmt_eur(month_gross)} — {month_gross * 100 / all_gross:.1f}% of total)')}
-{_chart_js('allPrice', 'allDates', 'allPriceDs', f'By catalog price — all time (gross {_fmt_eur(all_gross)})')}
-{_chart_js('monthPrice', 'monthDates', 'monthPriceDs', f'By catalog price — {month} (gross {_fmt_eur(month_gross)} — {month_gross * 100 / all_gross:.1f}% of total)')}
+{_chart_js("allColor", "allDates", "allColorDs", f"By color — all time (gross {_fmt_eur(all_gross)})")}
+{_chart_js("monthColor", "monthDates", "monthColorDs", f"By color — {month} (gross {_fmt_eur(month_gross)} — {month_gross * 100 / all_gross:.1f}% of total)")}
+{_chart_js("allPrice", "allDates", "allPriceDs", f"By catalog price — all time (gross {_fmt_eur(all_gross)})")}
+{_chart_js("monthPrice", "monthDates", "monthPriceDs", f"By catalog price — {month} (gross {_fmt_eur(month_gross)} — {month_gross * 100 / all_gross:.1f}% of total)")}
 </script>
 </body>
 </html>

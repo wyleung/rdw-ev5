@@ -57,7 +57,8 @@ def notify(matches: list[dict]) -> None:
             escaped_body = body.replace('"', '\\"')
             subprocess.run(
                 [
-                    "osascript", "-e",
+                    "osascript",
+                    "-e",
                     f'display notification "{escaped_body}" with title "{escaped_header}"',
                 ],
                 timeout=5,

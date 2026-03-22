@@ -1,10 +1,9 @@
 """CLI entry point: fetch latest Kia EV5 data and report new registrations."""
 
 import argparse
-import sys
 from pathlib import Path
 
-from . import scraper, db, report, alerts
+from . import alerts, db, report, scraper
 
 
 def main() -> None:
@@ -30,9 +29,7 @@ def main() -> None:
         for v in new_vehicles:
             price = v.get("catalogusprijs", "?")
             color = v.get("eerste_kleur", "?")
-            date = v.get(
-                "registratie_datum_goedkeuring_afschrijvingsmoment_bpm_dt", ""
-            )[:10]
+            date = v.get("registratie_datum_goedkeuring_afschrijvingsmoment_bpm_dt", "")[:10]
             print(f"  {v['kenteken']}  €{price}  {color}  {date}")
     else:
         print("\nNo new vehicles since last run.")

@@ -16,3 +16,13 @@ include = ["rdw_ev5*"]
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]  # pycodestyle, pyflakes, isort, pyupgrade
+
+[tool.ruff.lint.per-file-ignores]
+"rdw_ev5/report.py" = ["E501"]  # long lines live inside HTML template strings

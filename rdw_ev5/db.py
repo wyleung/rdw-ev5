@@ -33,9 +33,7 @@ def upsert_vehicles(conn: sqlite3.Connection, vehicles: list[dict]) -> list[dict
     new = []
     for v in vehicles:
         kenteken = v["kenteken"]
-        existing = conn.execute(
-            "SELECT 1 FROM vehicles WHERE kenteken = ?", (kenteken,)
-        ).fetchone()
+        existing = conn.execute("SELECT 1 FROM vehicles WHERE kenteken = ?", (kenteken,)).fetchone()
         if existing:
             continue
         conn.execute(
