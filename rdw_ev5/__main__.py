@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import scraper, db
+from . import scraper, db, report, alerts
 
 
 def main() -> None:
@@ -24,7 +24,6 @@ def main() -> None:
     conn = db.connect(args.db)
     new_vehicles = db.upsert_vehicles(conn, vehicles)
     total = db.get_total_count(conn)
-    conn.close()
 
     if new_vehicles:
         print(f"\n=== {len(new_vehicles)} new vehicle(s) found ===")
@@ -39,6 +38,19 @@ def main() -> None:
         print("\nNo new vehicles since last run.")
 
     print(f"\nTotal tracked: {total}")
+
+    # Check for watched vehicle: WIT + catalogusprijs > 50000
+    if new_vehicles:
+        matches = alerts.check_alerts(new_vehicles)
+        if matches:
+            alerts.notify(matches)
+            print(f"\n*** ALERT: {len(matches)} WIT >€50k vehicle(s) matched! ***")
+            for m in matches:
+                print(f"  >>> {m['kenteken']}  €{m.get('catalogusprijs', '?')}")
+
+    report_path = report.generate_report(conn)
+    conn.close()
+    print(f"Report: {report_path}")
 
 
 if __name__ == "__main__":
