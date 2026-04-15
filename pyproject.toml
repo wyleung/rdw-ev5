@@ -5,6 +5,9 @@ description = "Daily scraper for Kia EV5 registrations from RDW open data"
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "websockets>=13,<16",
 ]
 
 [project.scripts]
@@ -26,3 +29,6 @@ select = ["E", "F", "I", "UP"]  # pycodestyle, pyflakes, isort, pyupgrade
 
 [tool.ruff.lint.per-file-ignores]
 "rdw_ev5/report.py" = ["E501"]  # long lines live inside HTML template strings
+"rdw_ev5/webapp.py" = ["E501"]
+"rdw_ev5/ship_report.py" = ["E501"]
+"rdw_ev5/vessel_tracker.py" = ["E501"]

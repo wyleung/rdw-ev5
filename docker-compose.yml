@@ -1,0 +1,38 @@
+services:
+  # Web dashboard — always running
+  web:
+    build: .
+    command: uvicorn rdw_ev5.webapp:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  # Kia scraper — runs full sync every 6 hours
+  scraper:
+    build: .
+    command: >
+      sh -c "while true; do
+        echo '--- Kia sync at $$(date) ---';
+        python -m rdw_ev5 --kia-sync --db /app/data/ev5.db --kia-db /app/data/kia.db;
+        sleep 21600;
+      done"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  # Vessel tracker — checks AIS positions every 4 hours
+  tracker:
+    build: .
+    command: >
+      sh -c "while true; do
+        echo '--- Vessel check at $$(date) ---';
+        python -m rdw_ev5.vessel_tracker --duration 120;
+        sleep 14400;
+      done"
+    environment:
+      - AISSTREAM_API_KEY=${AISSTREAM_API_KEY:-}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

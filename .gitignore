@@ -6,3 +6,6 @@ build/
 .venv/
 data/*.db
 data/reports/
+data/*.log
+data/*.json
+.env

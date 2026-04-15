@@ -1,18 +1,40 @@
 """Alert when new vehicles match watch criteria."""
 
+import os
 import subprocess
 import sys
 from datetime import date
 from pathlib import Path
 
+import httpx
+
 ALERT_LOG = Path(__file__).resolve().parent.parent / "data" / "alerts.log"
 
-# Ship schedule: Pyeongtaek → Rotterdam
-SHIPS = [
-    ("NOCC PACIFIC V-WE610", "2026-04-11"),
-    ("MIGNON V-WE611", "2026-04-17"),
-    ("NOCC ADRIATIC V-WE614", "2026-05-17"),
+# Ship arrivals at Rotterdam/Zeebrugge — (name, port, date, source)
+# Sources: "eukor" = EUKOR schedule screenshot, "mst" = MyShipTracking, "rdw" = RDW wave analysis
+SHIPS_DETAILED = [
+    # Estimated from RDW registration wave analysis (pre-2026, vessel names unknown)
+    ("Unknown ship", "Rotterdam", "2025-10-18", "rdw"),
+    ("Unknown ship", "Rotterdam", "2025-11-14", "rdw"),
+    ("Unknown ship", "Rotterdam", "2025-11-21", "rdw"),
+    ("Unknown ship", "Rotterdam", "2025-12-02", "rdw"),
+    ("Unknown ship", "Rotterdam", "2025-12-07", "rdw"),  # first EV5s
+    ("Unknown ship", "Rotterdam", "2025-12-12", "rdw"),
+    ("Unknown ship", "Rotterdam", "2025-12-19", "rdw"),
+    ("Unknown ship", "Rotterdam", "2025-12-26", "rdw"),
+    # Confirmed from EUKOR schedule + MyShipTracking
+    ("MORNING LYNN V-WE602", "Rotterdam", "2026-02-28", "eukor"),
+    ("MORNING CALM V-WE608", "Rozenburg", "2026-03-27", "mst"),
+    ("MORNING CALM V-WE608", "Zeebrugge", "2026-03-31", "mst"),
+    # Upcoming (EUKOR schedule, updated 2026-04-11)
+    ("NOCC PACIFIC V-WE610", "Rotterdam", "2026-04-12", "eukor"),
+    ("MIGNON V-WE611", "Rotterdam", "2026-04-18", "eukor"),
+    ("NOCC ADRIATIC V-WE614", "Rotterdam", "2026-05-19", "eukor"),
+    ("MORNING CAPO V-WE615", "Rotterdam", "2026-05-23", "eukor"),
 ]
+
+# Flat (name, date) list for backwards compat with _next_ship / ship_report
+SHIPS = [(name, date) for name, _port, date, _src in SHIPS_DETAILED]
 
 
 def _next_ship() -> str:
@@ -70,6 +92,20 @@ def notify(matches: list[dict]) -> None:
             )
     except FileNotFoundError:
         pass
+
+    # Slack webhook (set SLACK_WEBHOOK_URL env var to enable)
+    slack_url = os.environ.get("SLACK_WEBHOOK_URL")
+    if slack_url:
+        try:
+            httpx.post(
+                slack_url,
+                json={
+                    "text": f"🚗 *{header}*\n```\n{body}\n```\n_Next ship: {ship_info}_",
+                },
+                timeout=10,
+            )
+        except Exception:
+            pass  # don't fail the run if Slack is unreachable
 
     # Append to log
     ALERT_LOG.parent.mkdir(parents=True, exist_ok=True)
