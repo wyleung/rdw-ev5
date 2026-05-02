@@ -1,8 +1,6 @@
 """Alert when new vehicles match watch criteria."""
 
 import os
-import subprocess
-import sys
 from datetime import date
 from pathlib import Path
 
@@ -28,7 +26,7 @@ SHIPS_DETAILED = [
     ("MORNING CALM V-WE608", "Zeebrugge", "2026-03-31", "mst"),
     # Upcoming (EUKOR schedule, updated 2026-04-11)
     ("NOCC PACIFIC V-WE610", "Rotterdam", "2026-04-12", "eukor"),
-    ("MIGNON V-WE611", "Rotterdam", "2026-04-18", "eukor"),
+    ("MIGNON V-WE611", "Rotterdam", "2026-04-22", "eukor"),
     ("NOCC ADRIATIC V-WE614", "Rotterdam", "2026-05-19", "eukor"),
     ("MORNING CAPO V-WE615", "Rotterdam", "2026-05-23", "eukor"),
 ]
@@ -71,27 +69,6 @@ def notify(matches: list[dict]) -> None:
 
     body = "\n".join(lines)
     header = f"Kia EV5 WIT >€50k — {len(matches)} match(es)!"
-
-    # Desktop notification
-    try:
-        if sys.platform == "darwin":
-            escaped_header = header.replace('"', '\\"')
-            escaped_body = body.replace('"', '\\"')
-            subprocess.run(
-                [
-                    "osascript",
-                    "-e",
-                    f'display notification "{escaped_body}" with title "{escaped_header}"',
-                ],
-                timeout=5,
-            )
-        elif sys.platform.startswith("linux"):
-            subprocess.run(
-                ["notify-send", "--urgency=critical", "-i", "car", header, body],
-                timeout=5,
-            )
-    except FileNotFoundError:
-        pass
 
     # Slack webhook (set SLACK_WEBHOOK_URL env var to enable)
     slack_url = os.environ.get("SLACK_WEBHOOK_URL")

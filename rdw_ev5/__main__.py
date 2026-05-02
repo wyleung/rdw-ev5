@@ -17,18 +17,8 @@ def _kia_sync(args) -> None:
     kia_total = kia_db.get_total_count(kia_conn)
     print(f"Kia DB: {new_count} new, {kia_total} total")
 
-    # Scrape vessel port calls from MyShipTracking
-    print("Scraping vessel port calls...")
-    port_scraper.scrape_all()
-
-    # Ship arrivals report (from full Kia DB)
-    ship_path = ship_report.generate_ship_report(kia_conn)
-    print(f"Ship report: {ship_path}")
-
-    # Extract EV5 records and feed into ev5.db
+    # Extract EV5 records and check alerts FIRST (before any report writes)
     ev5_records = kia_db.extract_ev5(kia_conn)
-    kia_conn.close()
-
     ev5_conn = db.connect(args.db)
     new_ev5 = db.upsert_vehicles(ev5_conn, ev5_records)
     ev5_total = db.get_total_count(ev5_conn)
@@ -52,9 +42,28 @@ def _kia_sync(args) -> None:
 
     print(f"EV5 tracked: {ev5_total}")
 
-    report_path = report.generate_report(ev5_conn)
+    # Scrape vessel port calls (best-effort)
+    try:
+        print("Scraping vessel port calls...")
+        port_scraper.scrape_all()
+    except Exception as e:
+        print(f"Port scraper failed: {e}")
+
+    # Reports (best-effort — don't fail the run if writes are blocked)
+    try:
+        ship_path = ship_report.generate_ship_report(kia_conn)
+        print(f"Ship report: {ship_path}")
+    except Exception as e:
+        print(f"Ship report failed: {e}")
+
+    try:
+        report_path = report.generate_report(ev5_conn)
+        print(f"Report: {report_path}")
+    except Exception as e:
+        print(f"EV5 report failed: {e}")
+
+    kia_conn.close()
     ev5_conn.close()
-    print(f"Report: {report_path}")
 
 
 def _ev5_only(args) -> None:
