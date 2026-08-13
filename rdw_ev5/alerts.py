@@ -6,6 +6,9 @@ from pathlib import Path
 
 import httpx
 
+from . import eukor_schedule
+from .report import _derive_color, _derive_trim
+
 ALERT_LOG = Path(__file__).resolve().parent.parent / "data" / "alerts.log"
 
 # Ship arrivals at Rotterdam/Zeebrugge — (name, port, date, source)
@@ -36,39 +39,83 @@ SHIPS = [(name, date) for name, _port, date, _src in SHIPS_DETAILED]
 
 
 def _next_ship() -> str:
+    """Next upcoming arrival, preferring live EUKOR schedule data.
+
+    SHIPS_DETAILED is hand-transcribed and goes stale: it ran out on 2026-05-23,
+    after which every alert reported "all ships arrived". The cached EUKOR
+    schedule is merged in so this keeps working without anyone editing the list.
+    Explicit sort because the merged entries do not arrive in date order.
+    """
     today = date.today().isoformat()
-    for name, arrival in SHIPS:
+    upcoming = list(SHIPS)
+    try:
+        upcoming += [(name, eta) for name, _port, eta, _src in eukor_schedule.upcoming_arrivals()]
+    except Exception:
+        pass  # never let a schedule-cache problem break the alert path
+
+    for name, arrival in sorted(upcoming, key=lambda s: s[1]):
         if arrival >= today:
             return f"{name} (ETA {arrival})"
     return "all ships arrived"
 
 
+def _price(v: dict) -> int:
+    try:
+        return int(v.get("catalogusprijs") or 0)
+    except (ValueError, TypeError):
+        return 0
+
+
+def _colour(v: dict) -> str:
+    return (v.get("eerste_kleur") or "").upper()
+
+
+# uitvoering code of the EV5 GT — the 225 kW (306 pk) AWD variant, fiscale
+# waarde EUR 58,950 (Kia NL prijslijst juli 2026). RDW's catalogusprijs adds the
+# paint option, so a GT in any colour but the free Frost Blue lists at 59,845
+# (58,950 + 895). The first one appeared in RDW on 2026-08-12.
+GT_UITVOERING = "E12DX1"
+
+# Each entry is (label, predicate). A vehicle matching any predicate alerts,
+# tagged with the label so the message says which watch fired.
+WATCHES: list[tuple] = [
+    ("WIT >€50k", lambda v: _colour(v) == "WIT" and _price(v) > 50000),
+    # Ordered car: EV5 GT in Ivory Silver. Deliberately matched on the variant
+    # code alone, not on colour: RDW records only Dutch colour names, and its
+    # GRIJS covers both Ivory Silver and Gravity Gray, so a colour filter could
+    # not isolate the car anyway — and would silently miss it if Ivory Silver
+    # turns out to register as WIT rather than GRIJS. The GT is rare enough
+    # (1 nationwide so far) that every one of them is worth seeing; the alert
+    # prints the colour so it is obvious at a glance whether it could be yours.
+    ("EV5 GT", lambda v: v.get("uitvoering") == GT_UITVOERING),
+]
+
+
 def check_alerts(new_vehicles: list[dict]) -> list[dict]:
-    """Return vehicles matching the watch criteria: WIT + catalogusprijs > 50000."""
+    """Return vehicles matching any watch, each tagged with `_watch`."""
     matches = []
     for v in new_vehicles:
-        color = (v.get("eerste_kleur") or "").upper()
-        try:
-            price = int(v.get("catalogusprijs", 0))
-        except (ValueError, TypeError):
-            continue
-        if color == "WIT" and price > 50000:
-            matches.append(v)
+        hits = [label for label, matches_fn in WATCHES if matches_fn(v)]
+        if hits:
+            tagged = dict(v)  # copy: never mutate the caller's rows
+            tagged["_watch"] = ", ".join(hits)
+            matches.append(tagged)
     return matches
 
 
 def notify(matches: list[dict]) -> None:
-    """Send desktop notification and append to alert log."""
+    """Post matches to Slack (when configured) and append them to the alert log."""
     ship_info = _next_ship()
     lines = []
     for v in matches:
-        kenteken = v["kenteken"]
-        price = v.get("catalogusprijs", "?")
-        line = f"{kenteken}  €{price}  WIT"
-        lines.append(line)
+        price = _price(v)
+        colour = _derive_color(v.get("eerste_kleur"), price)
+        trim = _derive_trim(v.get("uitvoering"), price)
+        watch = v.get("_watch", "")
+        lines.append(f"{v['kenteken']}  €{price}  {trim}  {colour}  [{watch}]")
 
     body = "\n".join(lines)
-    header = f"Kia EV5 WIT >€50k — {len(matches)} match(es)!"
+    header = f"Kia EV5 watch — {len(matches)} match(es)!"
 
     # Slack webhook (set SLACK_WEBHOOK_URL env var to enable)
     slack_url = os.environ.get("SLACK_WEBHOOK_URL")

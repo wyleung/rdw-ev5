@@ -65,7 +65,11 @@ def _derive_color(kleur: str | None, price: int | None) -> str:
 #   E11AZ1 = 530 km battery (Air / Plus)
 #   E11BZ1 = 520 km battery (Plus Advanced)
 #   E11CY1 = 505 km battery (GT-Line Business / GT-Line / GT-PlusLine)
-TRIM_ORDER = ["Air", "Plus", "Plus Advanced", "GT-Line Business", "GT-Line", "GT-PlusLine"]
+#   E12DX1 = GT, a separate variant code at EUR 59,845 — about 7k above the
+#            GT-PlusLine ceiling. First appeared in RDW on 2026-08-12. Without
+#            this mapping it falls through to the "EUR<price>" branch below and
+#            shows up in the charts as a one-off bogus trim label.
+TRIM_ORDER = ["Air", "Plus", "Plus Advanced", "GT-Line Business", "GT-Line", "GT-PlusLine", "GT"]
 
 TRIM_COLORS = {
     "Air": "#60a5fa",
@@ -74,6 +78,7 @@ TRIM_COLORS = {
     "GT-Line Business": "#a78bfa",
     "GT-Line": "#f97316",
     "GT-PlusLine": "#ef4444",
+    "GT": "#ec4899",
 }
 
 
@@ -89,6 +94,10 @@ def _derive_trim(uitvoering: str | None, price: int | None) -> str:
         if p < 50000:
             return "GT-Line"
         return "GT-PlusLine"
+    if uitvoering == "E12DX1":
+        # Single trim, so no price banding: the GT is the only 225 kW (306 pk)
+        # AWD variant, fiscale waarde EUR 58,950 (prijslijst juli 2026).
+        return "GT"
     return f"€{p}" if p else "Onbekend"
 
 
