@@ -1,0 +1,12 @@
+# The build only needs pyproject.toml and rdw_ev5/. Everything else is context
+# bloat sent to the daemon on every build — .venv alone is 78M and data/ is 17M.
+.venv/
+data/
+.git/
+.ruff_cache/
+*.egg-info/
+__pycache__/
+*.pyc
+.env
+dist/
+build/
