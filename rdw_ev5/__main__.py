@@ -3,7 +3,7 @@
 import argparse
 from pathlib import Path
 
-from . import alerts, db, kia_db, kia_scraper, port_scraper, report, ship_report
+from . import alerts, db, eukor_schedule, kia_db, kia_scraper, port_scraper, report, ship_report
 
 
 def _kia_sync(args) -> None:
@@ -48,6 +48,15 @@ def _kia_sync(args) -> None:
         port_scraper.scrape_all()
     except Exception as e:
         print(f"Port scraper failed: {e}")
+
+    # Refresh forward-looking EUKOR ETAs (best-effort). Runs after the alert
+    # check above on purpose: the alert reads the *cached* schedule, so a slow
+    # or failing fetch here can never hold up or break an alert.
+    try:
+        print("Fetching EUKOR schedules...")
+        eukor_schedule.scrape_all()
+    except Exception as e:
+        print(f"EUKOR schedule fetch failed: {e}")
 
     # Reports (best-effort — don't fail the run if writes are blocked)
     try:
